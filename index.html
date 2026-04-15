@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SafeRoute AI – Predictive Risk Navigator</title>
+  <meta name="description" content="AI-powered urban route safety predictor that tells you not just the safest route, but when a route becomes unsafe." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header" role="banner">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon" aria-hidden="true">🛡️</span>
+        <div>
+          <span class="logo-title">SafeRoute AI</span>
+          <span class="logo-sub">Predictive Risk Navigator</span>
+        </div>
+      </div>
+      <div class="header-badge">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span>Live Simulation</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main" role="main">
+    <!-- Hero tagline -->
+    <section class="hero" aria-label="Tagline">
+      <p class="hero-tagline">It doesn't just tell you the <strong>safest route</strong> — it tells you <strong>when a route becomes unsafe.</strong></p>
+    </section>
+
+    <!-- Controls Panel -->
+    <section class="panel controls-panel" aria-label="Route Controls">
+      <div class="panel-header">
+        <h2 class="panel-title"><span aria-hidden="true">⚙️</span> Route Settings</h2>
+      </div>
+
+      <div class="controls-grid">
+        <!-- Origin / Destination -->
+        <div class="control-group">
+          <label class="control-label" for="origin">📍 Origin</label>
+          <select id="origin" class="control-select" aria-label="Select origin location">
+            <option value="downtown">Downtown Central</option>
+            <option value="university">University District</option>
+            <option value="market">Old City Market</option>
+            <option value="suburb">North Suburbs</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label class="control-label" for="destination">🏁 Destination</label>
+          <select id="destination" class="control-select" aria-label="Select destination location">
+            <option value="techpark">Tech Park Hub</option>
+            <option value="airport">City Airport</option>
+            <option value="hospital">Central Hospital</option>
+            <option value="station">Railway Station</option>
+          </select>
+        </div>
+
+        <!-- Departure Time -->
+        <div class="control-group">
+          <label class="control-label" for="departure-time">🕐 Departure Time</label>
+          <input type="time" id="departure-time" class="control-input" value="22:30" aria-label="Set departure time" />
+        </div>
+
+        <!-- Decision Mode -->
+        <div class="control-group">
+          <label class="control-label" for="decision-mode">🧭 Decision Mode</label>
+          <div class="mode-toggle" role="group" aria-label="Select decision mode">
+            <button class="mode-btn" id="mode-fastest" data-mode="fastest" aria-pressed="false">⚡ Fastest</button>
+            <button class="mode-btn" id="mode-balanced" data-mode="balanced" aria-pressed="false">⚖️ Balanced</button>
+            <button class="mode-btn active" id="mode-safest" data-mode="safest" aria-pressed="true">🛡️ Safest</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-actions">
+        <button class="btn-primary" id="analyze-btn" aria-label="Analyze routes">
+          <span class="btn-icon" aria-hidden="true">🔍</span>
+          Analyze Routes
+        </button>
+        <button class="btn-secondary" id="simulate-later-btn" aria-label="Simulate leaving 20 minutes later">
+          <span class="btn-icon" aria-hidden="true">⏩</span>
+          What if I leave 20 mins later?
+        </button>
+      </div>
+    </section>
+
+    <!-- Loading State -->
+    <div class="loading-state" id="loading-state" hidden aria-live="polite" aria-label="Analyzing routes">
+      <div class="loader-ring" aria-hidden="true"></div>
+      <p class="loading-text">Simulating risk vectors across time...</p>
+    </div>
+
+    <!-- Results -->
+    <section class="results-section" id="results-section" hidden aria-label="Route Analysis Results">
+
+      <!-- Time Simulation Banner -->
+      <div class="sim-banner" id="sim-banner" hidden role="alert" aria-live="polite">
+        <span aria-hidden="true">⏩</span>
+        <span id="sim-banner-text">Simulating departure 20 mins later</span>
+      </div>
+
+      <!-- Summary Bar -->
+      <div class="summary-bar" id="summary-bar" aria-live="polite">
+        <div class="summary-item">
+          <span class="summary-label">Analysis Time</span>
+          <span class="summary-value" id="analysis-time-display">—</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Mode</span>
+          <span class="summary-value" id="mode-display">Safest</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Routes Found</span>
+          <span class="summary-value">3</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Recommended</span>
+          <span class="summary-value recommended-tag" id="recommended-tag-display">Route B</span>
+        </div>
+      </div>
+
+      <!-- Route Cards -->
+      <div class="routes-grid" id="routes-grid" role="list" aria-label="Available routes"></div>
+
+      <!-- Prediction Timeline -->
+      <div class="panel timeline-panel" aria-label="Risk Timeline Prediction">
+        <div class="panel-header">
+          <h2 class="panel-title"><span aria-hidden="true">📈</span> Future Risk Forecast</h2>
+          <span class="panel-badge">Next 60 mins</span>
+        </div>
+        <p class="timeline-desc">How each route's risk level changes over time from your departure.</p>
+        <div class="timeline-chart" id="timeline-chart" aria-label="Risk forecast chart"></div>
+        <div class="timeline-legend">
+          <span class="legend-item legend-low">Low Risk</span>
+          <span class="legend-item legend-medium">Medium Risk</span>
+          <span class="legend-item legend-high">High Risk</span>
+        </div>
+      </div>
+
+      <!-- Critical Segments -->
+      <div class="panel segments-panel" aria-label="Critical Segment Alerts">
+        <div class="panel-header">
+          <h2 class="panel-title"><span aria-hidden="true">⚠️</span> Critical Segment Alerts</h2>
+        </div>
+        <div id="segments-list" role="list" aria-label="Segment alerts"></div>
+      </div>
+
+      <!-- Explanation Engine -->
+      <div class="panel explanation-panel" aria-label="AI Explanation">
+        <div class="panel-header">
+          <h2 class="panel-title"><span aria-hidden="true">🤖</span> AI Explanation Engine</h2>
+        </div>
+        <div class="explanation-box" id="explanation-box" aria-live="polite"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <footer class="footer" role="contentinfo">
+    <p>SafeRoute AI · Built for PromptWars Challenge · Uses simulated urban safety data · <strong>Not a replacement for emergency services.</strong></p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
