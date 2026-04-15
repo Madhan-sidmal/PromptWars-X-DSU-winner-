@@ -4,6 +4,7 @@ const path = require('path');
 
 const PORT = Number(process.env.PORT || 8080);
 const ROOT = __dirname;
+const MAPS_API_KEY = process.env.MAPS_API_KEY || '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -49,11 +50,17 @@ function sendFile(filePath, res) {
 
     const ext = path.extname(filePath).toLowerCase();
     const type = MIME[ext] || 'application/octet-stream';
+    let body = content;
+
+    if (path.basename(filePath).toLowerCase() === 'index.html') {
+      body = Buffer.from(String(content).replaceAll('__MAPS_API_KEY__', MAPS_API_KEY), 'utf-8');
+    }
+
     res.writeHead(200, {
       'Content-Type': type,
       'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
     });
-    res.end(content);
+    res.end(body);
   });
 }
 

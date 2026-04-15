@@ -158,6 +158,26 @@
 
   <!-- Google Maps JS API -->
   <script src="script.js"></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAVIXUHcRZWF4gTEmjNUPshQ6r3q6sNTrM&callback=onMapsReady&loading=async" async defer onerror="onMapsLoadError()"></script>
+  <script>
+    (function loadMaps() {
+      const mapsApiKey = '__MAPS_API_KEY__';
+      if (!mapsApiKey || mapsApiKey === '__MAPS_API_KEY__') {
+        const statusEl = document.getElementById('search-status');
+        if (statusEl) {
+          statusEl.innerHTML = '<span class="status-error">⚠ Missing Google Maps key. Set MAPS_API_KEY in Cloud Run or local env.</span>';
+        }
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(mapsApiKey) + '&callback=onMapsReady&loading=async';
+      script.async = true;
+      script.defer = true;
+      script.onerror = function () {
+        if (typeof onMapsLoadError === 'function') onMapsLoadError();
+      };
+      document.body.appendChild(script);
+    })();
+  </script>
 </body>
 </html>

@@ -114,6 +114,7 @@ export REGION="asia-south1"
 export SERVICE_NAME="saferoute-ai"
 export REPOSITORY="saferoute"
 export IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE_NAME:latest"
+export MAPS_API_KEY="your-google-maps-api-key"
 ```
 
 ### 2. Configure gcloud
@@ -144,6 +145,7 @@ gcloud run deploy $SERVICE_NAME \
   --image $IMAGE_URI \
   --platform managed \
   --region $REGION \
+  --set-env-vars MAPS_API_KEY=$MAPS_API_KEY \
   --allow-unauthenticated
 ```
 
@@ -153,7 +155,11 @@ After deployment, Cloud Run prints a URL. Open it in the browser.
 
 Note:
 - Cloud Run automatically injects PORT and the app listens on it via server.js.
+- The app injects MAPS_API_KEY from Cloud Run environment at runtime; no key is hardcoded in HTML.
 - If Google Maps API key has HTTP referrer restrictions, add your Cloud Run URL host to allowed referrers.
+- Recommended allowed referrers examples:
+  - https://SERVICE-NAME-xxxxx-REGION.a.run.app/*
+  - https://*.run.app/*
 
 ## Evaluation Alignment
 
