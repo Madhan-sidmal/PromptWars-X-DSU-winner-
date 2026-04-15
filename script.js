@@ -21,6 +21,14 @@ let userLocation = null;
 let currentRoutes = [];  // analysed route objects
 let rawDirectionsResults = [];  // raw Google route legs
 let liveUserMarker = null;
+let isMapsReady = false;
+
+function setSearchButtonState(disabled, label) {
+  const btn = document.getElementById('btn-search');
+  if (!btn) return;
+  btn.disabled = disabled;
+  if (label) btn.textContent = label;
+}
 
 function setStatus(message, type = 'loading') {
   const statusEl = document.getElementById('search-status');
@@ -29,6 +37,7 @@ function setStatus(message, type = 'loading') {
 }
 
 function onMapsLoadError() {
+  setSearchButtonState(true, 'Map Unavailable');
   setStatus('⚠ Google Maps failed to load. Check API key, enabled APIs, and referrer restrictions.', 'error');
 }
 
@@ -36,6 +45,7 @@ window.onMapsLoadError = onMapsLoadError;
 
 // Fired by Maps JS when key auth fails.
 window.gm_authFailure = function gmAuthFailure() {
+  setSearchButtonState(true, 'Auth Failed');
   setStatus('⚠ API key authentication failed. Verify the key and allowed HTTP referrers.', 'error');
 };
 
@@ -370,9 +380,13 @@ const RiskEngine = (() => {
 
 function onMapsReady() {
   if (!window.google || !google.maps) {
+    setSearchButtonState(true, 'Map Unavailable');
     setStatus('⚠ Google Maps is unavailable in this environment.', 'error');
     return;
   }
+
+  isMapsReady = true;
+  setSearchButtonState(false, '🔍 Find Routes');
 
   // Init map
   map = new google.maps.Map(document.getElementById('google-map'), {
@@ -695,7 +709,10 @@ const SafetyAssist = (() => {
    ============================================================ */
 
 async function findRoutes(origin, destination) {
-  const btnSearch = document.getElementById('btn-search');
+  if (!isMapsReady || !map) {
+    setStatus('⚠ Map is still loading. Please wait a moment and try again.', 'error');
+    return;
+  }
 
   if (!origin || !destination) {
     setStatus('⚠ Please enter both origin and destination.', 'error');
@@ -703,7 +720,7 @@ async function findRoutes(origin, destination) {
   }
 
   setStatus('🔍 Fetching routes & analyzing safety...', 'loading');
-  btnSearch.disabled = true;
+  setSearchButtonState(true, '⏳ Analyzing...');
 
   routePolylines.forEach(poly => poly.setMap(null));
   routePolylines = [];
@@ -712,7 +729,6 @@ async function findRoutes(origin, destination) {
 
   try {
     const routes = await computeRoutes(origin, destination);
-    btnSearch.disabled = false;
 
     if (!routes || routes.length === 0) {
       setStatus('⚠ No routes found. Try different locations.', 'error');
@@ -727,9 +743,10 @@ async function findRoutes(origin, destination) {
       setStatus(`✓ Analysis complete - ${currentRoutes.length} routes scored.`, 'success');
     }, 300);
   } catch (err) {
-    btnSearch.disabled = false;
     const msg = err && err.message ? err.message : 'Failed to fetch routes.';
     setStatus(`⚠ ${msg}`, 'error');
+  } finally {
+    setSearchButtonState(false, '🔍 Find Routes');
   }
 }
 

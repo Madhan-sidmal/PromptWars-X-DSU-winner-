@@ -69,8 +69,8 @@
           <label class="search-label" for="input-dest">🏁 Destination</label>
           <input type="text" id="input-dest" class="search-input" placeholder="Search destination..." autocomplete="off" />
         </div>
-        <button class="btn-search" id="btn-search" aria-label="Find safe routes">
-          🔍 Find Routes
+        <button class="btn-search" id="btn-search" aria-label="Find safe routes" disabled>
+          ⏳ Loading Map...
         </button>
       </div>
       <div class="search-status" id="search-status" role="status" aria-live="polite"></div>
@@ -160,8 +160,11 @@
   <script src="script.js"></script>
   <script>
     (function loadMaps() {
-      const mapsApiKey = '__MAPS_API_KEY__';
-      if (!mapsApiKey || mapsApiKey === '__MAPS_API_KEY__') {
+      const embeddedApiKey = 'AIzaSyAVIXUHcRZWF4gTEmjNUPshQ6r3q6sNTrM';
+      const envApiKey = '__MAPS_API_KEY__';
+      const mapsApiKey = envApiKey && envApiKey !== '__MAPS_API_KEY__' ? envApiKey : embeddedApiKey;
+
+      if (!mapsApiKey) {
         const statusEl = document.getElementById('search-status');
         if (statusEl) {
           statusEl.innerHTML = '<span class="status-error">⚠ Missing Google Maps key. Set MAPS_API_KEY in Cloud Run or local env.</span>';
