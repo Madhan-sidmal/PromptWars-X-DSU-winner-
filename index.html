@@ -17,7 +17,7 @@
     <div class="header-inner">
       <div class="logo">
         <div class="logo-icon-wrap" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
         </div>
         <div>
           <span class="logo-title">SafeRoute AI</span>
@@ -30,8 +30,8 @@
           <span class="pulse-dot" aria-hidden="true"></span>
           <span>Live</span>
         </div>
-        <!-- Mode Toggle in header -->
-        <div class="mode-toggle" role="group" aria-label="Select decision mode" id="header-mode-toggle">
+        <!-- Desktop mode toggle -->
+        <div class="mode-toggle" role="group" aria-label="Decision mode" id="header-mode-toggle">
           <button class="mode-btn" data-mode="fastest" aria-pressed="false" id="mode-fastest">⚡ Fastest</button>
           <button class="mode-btn" data-mode="balanced" aria-pressed="false" id="mode-balanced">⚖️ Balanced</button>
           <button class="mode-btn active" data-mode="safest" aria-pressed="true" id="mode-safest">🛡️ Safest</button>
@@ -42,6 +42,13 @@
 
   <!-- ===== MAIN ===== -->
   <main class="main" role="main">
+
+    <!-- Mobile mode toggle (shown on small screens) -->
+    <div class="mode-toggle mode-toggle-mobile" role="group" aria-label="Decision mode" id="mobile-mode-toggle">
+      <button class="mode-btn" data-mode="fastest" aria-pressed="false">⚡ Fastest</button>
+      <button class="mode-btn" data-mode="balanced" aria-pressed="false">⚖️ Balanced</button>
+      <button class="mode-btn active" data-mode="safest" aria-pressed="true">🛡️ Safest</button>
+    </div>
 
     <!-- Hero tagline -->
     <div class="hero" aria-label="Tagline">
@@ -60,10 +67,10 @@
         <!-- SVG Route Map -->
         <div class="map-card" aria-label="Route map visualization" role="img">
           <svg id="route-map-svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-            <!-- Grid dots background -->
+            <!-- Grid dots (light theme) -->
             <defs>
               <pattern id="grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
-                <circle cx="16" cy="16" r="1" fill="rgba(255,255,255,0.06)" />
+                <circle cx="16" cy="16" r="1" fill="#e2e8f0" />
               </pattern>
             </defs>
             <rect width="640" height="400" fill="url(#grid)" />
@@ -73,18 +80,18 @@
 
             <!-- Start point -->
             <g id="map-start">
-              <circle cx="80" cy="280" r="14" fill="rgba(59,130,246,0.2)" />
-              <circle cx="80" cy="280" r="8" fill="#3b82f6" />
-              <circle cx="80" cy="280" r="4" fill="white" />
-              <text x="80" y="306" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="Plus Jakarta Sans" font-weight="700" letter-spacing="1">START</text>
+              <circle cx="80" cy="280" r="14" fill="rgba(37,99,235,0.12)" />
+              <circle cx="80" cy="280" r="8" fill="#2563eb" />
+              <circle cx="80" cy="280" r="3.5" fill="white" />
+              <text x="80" y="306" text-anchor="middle" fill="#64748b" font-size="10" font-family="Plus Jakarta Sans" font-weight="700" letter-spacing="1">START</text>
             </g>
 
             <!-- End point -->
             <g id="map-end">
-              <circle cx="560" cy="130" r="14" fill="rgba(59,130,246,0.2)" />
-              <circle cx="560" cy="130" r="8" fill="#3b82f6" />
-              <circle cx="560" cy="130" r="4" fill="white" />
-              <text x="560" y="156" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="Plus Jakarta Sans" font-weight="700" letter-spacing="1">END</text>
+              <circle cx="560" cy="130" r="14" fill="rgba(37,99,235,0.12)" />
+              <circle cx="560" cy="130" r="8" fill="#2563eb" />
+              <circle cx="560" cy="130" r="3.5" fill="white" />
+              <text x="560" y="156" text-anchor="middle" fill="#64748b" font-size="10" font-family="Plus Jakarta Sans" font-weight="700" letter-spacing="1">END</text>
             </g>
 
             <!-- Critical segment markers (drawn by JS) -->
@@ -93,16 +100,16 @@
 
           <!-- Map legend -->
           <div class="map-legend" aria-label="Map legend">
-            <span class="legend-dot" style="background:#22a861"></span><span>Low</span>
-            <span class="legend-dot" style="background:#d97706"></span><span>Moderate</span>
-            <span class="legend-dot" style="background:#dc4a4a"></span><span>High</span>
+            <span><span class="legend-dot" style="background:#16a34a"></span> Low</span>
+            <span><span class="legend-dot" style="background:#d97706"></span> Moderate</span>
+            <span><span class="legend-dot" style="background:#dc2626"></span> High</span>
           </div>
         </div>
 
         <!-- Departure info bar -->
         <div class="info-bar">
           <span class="info-item">
-            📍 <span id="info-origin">MG Road</span> → <span id="info-dest">Tech Park</span>
+            📍 <span id="info-origin">MG Road</span> → <span id="info-dest">Destination</span>
           </span>
           <span class="info-sep" aria-hidden="true">|</span>
           <span class="info-item">
@@ -120,16 +127,8 @@
           <p class="sim-desc">"What if I leave later?" — See how risk changes over time.</p>
 
           <div class="slider-wrap">
-            <input
-              type="range"
-              id="departure-slider"
-              min="0" max="120" step="5" value="0"
-              class="dep-slider"
-              aria-label="Departure offset in minutes"
-            />
-            <div class="slider-labels">
-              <span>Now</span><span>+30m</span><span>+1h</span><span>+2h</span>
-            </div>
+            <input type="range" id="departure-slider" min="0" max="120" step="5" value="0" class="dep-slider" aria-label="Departure offset in minutes" />
+            <div class="slider-labels"><span>Now</span><span>+30m</span><span>+1h</span><span>+2h</span></div>
           </div>
 
           <div class="sim-display" id="sim-display" aria-live="polite">

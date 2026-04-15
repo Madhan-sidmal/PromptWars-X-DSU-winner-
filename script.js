@@ -1,13 +1,6 @@
 /**
  * SafeRoute AI – Predictive Risk Navigator
- * Merged engine: reference project riskEngine.ts + original SafeRoute logic
- *
- * Modules:
- *  1. ROUTE_DATA      – Bangalore-based simulated segments (with incidentHistory)
- *  2. RiskEngine      – Segment risk calc + time multiplier + crowd decay
- *  3. RouteCalculator – Builds full Route objects with future forecast
- *  4. MapRenderer     – SVG animated route map
- *  5. UIController    – Orchestrates everything
+ * v3 – Light theme, mobile-responsive
  */
 
 'use strict';
@@ -22,10 +15,10 @@ const ROUTE_DATA = [
     name: 'MG Road → Via Brigade Road',
     distanceKm: 4.2,
     segments: [
-      { id: 's1a', name: 'MG Road Main',        lighting: 0.90, crowdDensity: 0.80, isolation: 0.10, incidentHistory: 0.20, baseRisk: 0.15 },
-      { id: 's1b', name: 'Brigade Road Junction',lighting: 0.85, crowdDensity: 0.90, isolation: 0.05, incidentHistory: 0.15, baseRisk: 0.10 },
-      { id: 's1c', name: 'Residency Road',       lighting: 0.70, crowdDensity: 0.50, isolation: 0.30, incidentHistory: 0.30, baseRisk: 0.35 },
-      { id: 's1d', name: 'Richmond Circle',      lighting: 0.80, crowdDensity: 0.70, isolation: 0.15, incidentHistory: 0.20, baseRisk: 0.20 },
+      { id: 's1a', name: 'MG Road Main',         lighting: 0.90, crowdDensity: 0.80, isolation: 0.10, incidentHistory: 0.20, baseRisk: 0.15 },
+      { id: 's1b', name: 'Brigade Road Junction', lighting: 0.85, crowdDensity: 0.90, isolation: 0.05, incidentHistory: 0.15, baseRisk: 0.10 },
+      { id: 's1c', name: 'Residency Road',        lighting: 0.70, crowdDensity: 0.50, isolation: 0.30, incidentHistory: 0.30, baseRisk: 0.35 },
+      { id: 's1d', name: 'Richmond Circle',       lighting: 0.80, crowdDensity: 0.70, isolation: 0.15, incidentHistory: 0.20, baseRisk: 0.20 },
     ],
   },
   {
@@ -33,10 +26,10 @@ const ROUTE_DATA = [
     name: 'MG Road → Via Cubbon Park',
     distanceKm: 5.1,
     segments: [
-      { id: 's2a', name: 'MG Road Entry',      lighting: 0.90, crowdDensity: 0.80, isolation: 0.10, incidentHistory: 0.20, baseRisk: 0.15 },
-      { id: 's2b', name: 'Cubbon Park North',  lighting: 0.40, crowdDensity: 0.30, isolation: 0.70, incidentHistory: 0.50, baseRisk: 0.60 },
-      { id: 's2c', name: 'Cubbon Park South',  lighting: 0.35, crowdDensity: 0.25, isolation: 0.75, incidentHistory: 0.45, baseRisk: 0.55 },
-      { id: 's2d', name: 'Kasturba Road',      lighting: 0.75, crowdDensity: 0.60, isolation: 0.20, incidentHistory: 0.25, baseRisk: 0.20 },
+      { id: 's2a', name: 'MG Road Entry',     lighting: 0.90, crowdDensity: 0.80, isolation: 0.10, incidentHistory: 0.20, baseRisk: 0.15 },
+      { id: 's2b', name: 'Cubbon Park North', lighting: 0.40, crowdDensity: 0.30, isolation: 0.70, incidentHistory: 0.50, baseRisk: 0.60 },
+      { id: 's2c', name: 'Cubbon Park South', lighting: 0.35, crowdDensity: 0.25, isolation: 0.75, incidentHistory: 0.45, baseRisk: 0.55 },
+      { id: 's2d', name: 'Kasturba Road',     lighting: 0.75, crowdDensity: 0.60, isolation: 0.20, incidentHistory: 0.25, baseRisk: 0.20 },
     ],
   },
   {
@@ -44,60 +37,47 @@ const ROUTE_DATA = [
     name: 'MG Road → Via Commercial St',
     distanceKm: 3.8,
     segments: [
-      { id: 's3a', name: 'MG Road Start',       lighting: 0.90, crowdDensity: 0.85, isolation: 0.10, incidentHistory: 0.20, baseRisk: 0.12 },
-      { id: 's3b', name: 'Commercial Street',   lighting: 0.80, crowdDensity: 0.95, isolation: 0.05, incidentHistory: 0.30, baseRisk: 0.20 },
-      { id: 's3c', name: 'Shivaji Nagar Link',  lighting: 0.55, crowdDensity: 0.40, isolation: 0.40, incidentHistory: 0.45, baseRisk: 0.40 },
-      { id: 's3d', name: 'Infantry Road',       lighting: 0.75, crowdDensity: 0.65, isolation: 0.20, incidentHistory: 0.20, baseRisk: 0.18 },
+      { id: 's3a', name: 'MG Road Start',      lighting: 0.90, crowdDensity: 0.85, isolation: 0.10, incidentHistory: 0.20, baseRisk: 0.12 },
+      { id: 's3b', name: 'Commercial Street',  lighting: 0.80, crowdDensity: 0.95, isolation: 0.05, incidentHistory: 0.30, baseRisk: 0.20 },
+      { id: 's3c', name: 'Shivaji Nagar Link', lighting: 0.55, crowdDensity: 0.40, isolation: 0.40, incidentHistory: 0.45, baseRisk: 0.40 },
+      { id: 's3d', name: 'Infantry Road',      lighting: 0.75, crowdDensity: 0.65, isolation: 0.20, incidentHistory: 0.20, baseRisk: 0.18 },
     ],
   },
 ];
 
-// Duration (minutes) per mode
 const DURATION_MAP = {
   'route-0': { fastest: 18, balanced: 20, safest: 22 },
   'route-1': { fastest: 22, balanced: 24, safest: 26 },
   'route-2': { fastest: 15, balanced: 17, safest: 18 },
 };
 
-// SVG paths for the 3 routes
 const ROUTE_PATHS = [
   'M 80 280 Q 160 230, 240 210 Q 330 188, 420 155 Q 490 135, 560 130',
   'M 80 280 Q 130 300, 200 320 Q 310 350, 400 300 Q 490 240, 560 130',
   'M 80 280 Q 120 250, 190 240 Q 270 228, 350 255 Q 450 275, 560 130',
 ];
 
-// Critical segment approximate map positions
 const CRITICAL_POSITIONS = [
-  // route-0: Residency Road (index 2)
   { routeIdx: 0, segIdx: 2, x: 310, y: 190 },
-  // route-1: Cubbon Park North (index 1)
   { routeIdx: 1, segIdx: 1, x: 200, y: 315 },
-  // route-1: Cubbon Park South (index 2)
   { routeIdx: 1, segIdx: 2, x: 300, y: 345 },
-  // route-2: Shivaji Nagar Link (index 2)
   { routeIdx: 2, segIdx: 2, x: 360, y: 257 },
 ];
 
 /* ============================================================
-   2. RISK ENGINE  (ported from reference riskEngine.ts)
+   2. RISK ENGINE
    ============================================================ */
 
 const RiskEngine = (() => {
-  /**
-   * Time multiplier: risk is higher at night, lower in rush hours (more crowd = safer)
-   */
   function getTimeMultiplier(hour) {
     const h = hour % 24;
-    if (h >= 22 || h < 5)  return 1.8;  // late night
-    if (h >= 20)            return 1.4;  // evening
-    if (h >= 18)            return 1.1;  // dusk
-    if (h >= 6 && h < 10)  return 0.7;  // morning rush (more people = safer)
-    return 0.85;                          // daytime
+    if (h >= 22 || h < 5)  return 1.8;
+    if (h >= 20)            return 1.4;
+    if (h >= 18)            return 1.1;
+    if (h >= 6 && h < 10)  return 0.7;
+    return 0.85;
   }
 
-  /**
-   * Crowd decay for future forecasting
-   */
   function getCrowdDecay(minutesFromNow, baseHour) {
     const futureHour = (baseHour + minutesFromNow / 60) % 24;
     if (futureHour >= 22 || futureHour < 5) return 0.20;
@@ -107,26 +87,18 @@ const RiskEngine = (() => {
     return 0.60;
   }
 
-  /**
-   * Per-segment risk score [0–1]
-   * Weighted combination of: baseRisk, lighting, crowdDensity, isolation, incidentHistory
-   * Multiplied by time factor
-   */
   function segmentRisk(seg, hour) {
     const timeMul = getTimeMultiplier(hour);
     const raw = (
-      seg.baseRisk        * 0.30 +
-      (1 - seg.lighting)  * 0.25 +
+      seg.baseRisk         * 0.30 +
+      (1 - seg.lighting)   * 0.25 +
       (1 - seg.crowdDensity) * 0.20 +
-      seg.isolation       * 0.15 +
-      seg.incidentHistory * 0.10
+      seg.isolation        * 0.15 +
+      seg.incidentHistory  * 0.10
     ) * timeMul;
     return Math.min(1, Math.max(0, raw));
   }
 
-  /**
-   * Classify numeric score into level string
-   */
   function classify(score) {
     if (score < 0.30) return 'low';
     if (score < 0.55) return 'moderate';
@@ -134,9 +106,6 @@ const RiskEngine = (() => {
     return 'critical';
   }
 
-  /**
-   * Confidence = 1 − normalised variance across segment risks
-   */
   function confidence(segments, hour) {
     const risks = segments.map(s => segmentRisk(s, hour));
     const mean = risks.reduce((a, b) => a + b, 0) / risks.length;
@@ -144,7 +113,7 @@ const RiskEngine = (() => {
     return Math.round((1 - Math.min(variance * 4, 0.6)) * 100);
   }
 
-  return { segmentRisk, classify, confidence, getCrowdDecay, getTimeMultiplier };
+  return { segmentRisk, classify, confidence, getCrowdDecay };
 })();
 
 /* ============================================================
@@ -158,27 +127,22 @@ function calculateRoutes(hour, minute, mode) {
     const segRisks = rd.segments.map(s => RiskEngine.segmentRisk(s, currentHour));
     const avgRisk  = segRisks.reduce((a, b) => a + b, 0) / segRisks.length;
 
-    // Future risk forecast: every 15 min for 2 hours (9 ticks)
     const futureRiskScores = [];
     for (let m = 0; m <= 120; m += 15) {
       const futureHour = (currentHour + m / 60) % 24;
       const futureRisks = rd.segments.map(s => {
         const crowdMod = RiskEngine.getCrowdDecay(m, currentHour);
-        return RiskEngine.segmentRisk(
-          { ...s, crowdDensity: s.crowdDensity * crowdMod },
-          futureHour
-        );
+        return RiskEngine.segmentRisk({ ...s, crowdDensity: s.crowdDensity * crowdMod }, futureHour);
       });
       const futureAvg = futureRisks.reduce((a, b) => a + b, 0) / futureRisks.length;
-      const fh  = Math.floor((hour + Math.floor((minute + m) / 60)) % 24);
-      const fm  = (minute + m) % 60;
+      const fh = Math.floor((hour + Math.floor((minute + m) / 60)) % 24);
+      const fm = (minute + m) % 60;
       futureRiskScores.push({
         time:  `${String(fh).padStart(2,'0')}:${String(fm).padStart(2,'0')}`,
         score: Math.round(futureAvg * 100) / 100,
       });
     }
 
-    // Critical segments (risk > 0.50)
     const criticalSegments = rd.segments
       .map((s, i) => ({ segment: s, risk: segRisks[i] }))
       .filter(({ risk }) => risk > 0.50)
@@ -186,20 +150,13 @@ function calculateRoutes(hour, minute, mode) {
         const reasons = [];
         if (segment.lighting < 0.5)        reasons.push('low lighting');
         if (segment.isolation > 0.5)       reasons.push('isolated area');
-        if (segment.crowdDensity < 0.3)   reasons.push('low foot traffic');
+        if (segment.crowdDensity < 0.3)    reasons.push('low foot traffic');
         if (segment.incidentHistory > 0.4) reasons.push('incident history');
-        return {
-          segment,
-          reason: `${reasons.join(' + ')} (risk: ${Math.round(risk * 100)}%)`,
-        };
+        return { segment, reason: `${reasons.join(' + ')} (risk: ${Math.round(risk * 100)}%)` };
       });
 
-    // Will it become unsafe in next 2 hours?
-    const willBecomeUnsafe = futureRiskScores.some(
-      f => f.score > 0.60 && avgRisk < 0.50
-    );
+    const willBecomeUnsafe = futureRiskScores.some(f => f.score > 0.60 && avgRisk < 0.50);
 
-    // When does it first become worse?
     const currentLevel = RiskEngine.classify(avgRisk);
     const levelOrder = { low: 0, moderate: 1, high: 2, critical: 3 };
     const transition = futureRiskScores.slice(1).find(
@@ -209,27 +166,18 @@ function calculateRoutes(hour, minute, mode) {
     const dur = DURATION_MAP[rd.id] || { fastest: 20, balanced: 22, safest: 24 };
 
     return {
-      id:               rd.id,
-      name:             rd.name,
-      distanceKm:       rd.distanceKm,
-      estimatedMinutes: dur[mode],
-      segments:         rd.segments,
-      segRisks,
-      riskScore:        Math.round(avgRisk * 100) / 100,
-      riskLevel:        RiskEngine.classify(avgRisk),
-      confidence:       RiskEngine.confidence(rd.segments, currentHour),
-      futureRiskScores,
-      criticalSegments,
-      willBecomeUnsafe,
-      transition,
+      id: rd.id, name: rd.name, distanceKm: rd.distanceKm,
+      estimatedMinutes: dur[mode], segments: rd.segments, segRisks,
+      riskScore: Math.round(avgRisk * 100) / 100,
+      riskLevel: RiskEngine.classify(avgRisk),
+      confidence: RiskEngine.confidence(rd.segments, currentHour),
+      futureRiskScores, criticalSegments, willBecomeUnsafe, transition,
     };
   });
 
-  // Sort by mode
   return routes.sort((a, b) => {
     if (mode === 'safest')  return a.riskScore - b.riskScore;
     if (mode === 'fastest') return a.estimatedMinutes - b.estimatedMinutes;
-    // balanced
     const sA = a.riskScore * 0.6 + (a.estimatedMinutes / 30) * 0.4;
     const sB = b.riskScore * 0.6 + (b.estimatedMinutes / 30) * 0.4;
     return sA - sB;
@@ -237,47 +185,45 @@ function calculateRoutes(hour, minute, mode) {
 }
 
 /* ============================================================
-   4. MAP RENDERER (SVG animated map)
+   4. MAP RENDERER  (light-theme colors)
    ============================================================ */
 
 const MapRenderer = (() => {
   const RISK_COLORS = {
-    low:      '#22a861',
+    low:      '#16a34a',
     moderate: '#d97706',
-    high:     '#dc4a4a',
-    critical: '#b91c1c',
+    high:     '#dc2626',
+    critical: '#991b1b',
   };
 
-  function render(routes, selectedIdx) {
+  function render(routes) {
     const routesG  = document.getElementById('map-routes');
     const markersG = document.getElementById('map-critical-markers');
     routesG.innerHTML  = '';
     markersG.innerHTML = '';
 
-    // 1. Draw all paths (dimmed), selected on top + animated
     routes.forEach((route, i) => {
-      const color    = RISK_COLORS[route.riskLevel] || '#3b82f6';
-      const isActive = i === 0; // first in sorted list = recommended/selected
-      const path     = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      // Find original index
+      const color    = RISK_COLORS[route.riskLevel] || '#2563eb';
+      const isActive = i === 0;
       const origIdx  = ROUTE_DATA.findIndex(rd => rd.id === route.id);
       const d        = ROUTE_PATHS[origIdx] || ROUTE_PATHS[0];
 
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', d);
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', color);
       path.setAttribute('stroke-width', isActive ? '4' : '2');
       path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('opacity', isActive ? '1' : '0.22');
+      path.setAttribute('opacity', isActive ? '1' : '0.25');
       if (!isActive) path.setAttribute('stroke-dasharray', '8 6');
       path.classList.add('route-path');
       path.style.animationDelay = `${i * 0.15}s`;
       routesG.appendChild(path);
     });
 
-    // 2. Critical markers (for recommended/first route)
-    const topRoute  = routes[0];
-    const origIdx   = ROUTE_DATA.findIndex(rd => rd.id === topRoute.id);
+    // Critical markers for recommended route
+    const topRoute = routes[0];
+    const origIdx  = ROUTE_DATA.findIndex(rd => rd.id === topRoute.id);
     const positions = CRITICAL_POSITIONS.filter(p => p.routeIdx === origIdx);
     const critSegs  = topRoute.criticalSegments.map(cs => cs.segment.id);
 
@@ -286,33 +232,24 @@ const MapRenderer = (() => {
       if (!critSegs.includes(seg.id)) return;
 
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      g.style.animation = 'fade-in 0.5s ease 1s both';
 
-      // Pulse ring
       const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       ring.setAttribute('cx', pos.x); ring.setAttribute('cy', pos.y); ring.setAttribute('r', '16');
-      ring.setAttribute('fill', 'hsl(0,65%,55%)');
-      ring.setAttribute('opacity', '0.12');
+      ring.setAttribute('fill', '#dc2626'); ring.setAttribute('opacity', '0.10');
       ring.classList.add('crit-marker-pulse');
 
-      // Dot
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('cx', pos.x); dot.setAttribute('cy', pos.y); dot.setAttribute('r', '6');
-      dot.setAttribute('fill', 'hsl(0,65%,55%)');
+      dot.setAttribute('cx', pos.x); dot.setAttribute('cy', pos.y); dot.setAttribute('r', '5');
+      dot.setAttribute('fill', '#dc2626');
 
-      // Label
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       label.setAttribute('x', pos.x); label.setAttribute('y', pos.y - 22);
-      label.setAttribute('text-anchor', 'middle');
-      label.setAttribute('fill', 'hsl(0,65%,45%)');
-      label.setAttribute('font-size', '9');
-      label.setAttribute('font-family', 'Plus Jakarta Sans');
+      label.setAttribute('text-anchor', 'middle'); label.setAttribute('fill', '#b91c1c');
+      label.setAttribute('font-size', '9'); label.setAttribute('font-family', 'Plus Jakarta Sans');
       label.setAttribute('font-weight', '700');
       label.textContent = `⚠ ${seg.name}`;
 
-      g.appendChild(ring);
-      g.appendChild(dot);
-      g.appendChild(label);
+      g.appendChild(ring); g.appendChild(dot); g.appendChild(label);
       markersG.appendChild(g);
     });
   }
@@ -326,17 +263,11 @@ const MapRenderer = (() => {
 
 const UI = (() => {
   let currentMode     = 'safest';
-  let departureOffset = 0;   // minutes from now
-  let selectedCardIdx = 0;   // which card is expanded
-
-  // ---- Helpers ----
-
-  function now() {
-    return new Date();
-  }
+  let departureOffset = 0;
+  let selectedCardIdx = 0;
 
   function getDepartureHourMin() {
-    const d    = now();
+    const d     = new Date();
     const total = d.getHours() * 60 + d.getMinutes() + departureOffset;
     return { h: Math.floor(total / 60) % 24, m: total % 60 };
   }
@@ -351,27 +282,19 @@ const UI = (() => {
     const { h, m } = getDepartureHourMin();
     const routes    = calculateRoutes(h, m, currentMode);
 
-    // Update info bar
     document.getElementById('info-departure').textContent = fmt(h, m);
     document.getElementById('info-mode').textContent =
       currentMode.charAt(0).toUpperCase() + currentMode.slice(1);
     document.getElementById('route-count').textContent = routes.length;
 
-    // SVG map
-    MapRenderer.render(routes, selectedCardIdx);
-
-    // Route cards
+    MapRenderer.render(routes);
     renderRouteCards(routes);
   }
 
   function renderRouteCards(routes) {
     const list = document.getElementById('routes-list');
     list.innerHTML = '';
-
-    routes.forEach((route, rank) => {
-      const card = buildCard(route, rank);
-      list.appendChild(card);
-    });
+    routes.forEach((route, rank) => list.appendChild(buildCard(route, rank)));
   }
 
   function buildCard(route, rank) {
@@ -380,7 +303,6 @@ const UI = (() => {
     card.setAttribute('role', 'listitem');
     card.setAttribute('aria-label', route.name);
     card.setAttribute('tabindex', '0');
-    card.setAttribute('data-rank', rank);
 
     // Header
     const header = document.createElement('div');
@@ -408,15 +330,16 @@ const UI = (() => {
     if (route.willBecomeUnsafe) {
       const warn = document.createElement('div');
       warn.className = 'future-warning';
-      warn.innerHTML = `<span aria-hidden="true">📈</span> Risk increases within 2 hours`;
+      warn.innerHTML = `<span>📈</span> Risk increases within 2 hours`;
       card.appendChild(warn);
     }
 
-    // Prediction tag (when does it get worse)
+    // Transition prediction
     if (route.transition) {
       const tag = document.createElement('div');
       tag.className = 'future-warning';
-      tag.innerHTML = `<span aria-hidden="true">⚠️</span> Becomes <strong>${route.transition.level || RiskEngine.classify(route.transition.score)}</strong> risk at <strong>${route.transition.time}</strong>`;
+      const lvl = RiskEngine.classify(route.transition.score);
+      tag.innerHTML = `<span>⚠️</span> Becomes <strong>${lvl}</strong> risk at <strong>${route.transition.time}</strong>`;
       card.appendChild(tag);
     }
 
@@ -427,7 +350,7 @@ const UI = (() => {
       route.criticalSegments.forEach(cs => {
         const el = document.createElement('div');
         el.className = 'crit-seg';
-        el.innerHTML = `<span aria-hidden="true">⚠</span> <span><strong>${cs.segment.name}:</strong> ${cs.reason}</span>`;
+        el.innerHTML = `<span>⚠</span> <span><strong>${cs.segment.name}:</strong> ${cs.reason}</span>`;
         csWrap.appendChild(el);
       });
       card.appendChild(csWrap);
@@ -439,26 +362,23 @@ const UI = (() => {
     route.segments.forEach((seg, i) => {
       const risk  = route.segRisks[i];
       const level = RiskEngine.classify(risk);
-      const color = level === 'low' ? 'var(--risk-low)' : level === 'moderate' ? 'var(--risk-mod)' : 'var(--risk-high)';
+      const colors = { low: '#16a34a', moderate: '#d97706', high: '#dc2626', critical: '#991b1b' };
       const item  = document.createElement('div');
       item.className = 'seg-bar-item';
       item.innerHTML = `
-        <div class="seg-bar-fill" style="background:${color};opacity:0.65;height:5px;border-radius:100px"></div>
+        <div class="seg-bar-fill" style="background:${colors[level]};opacity:0.55"></div>
         <div class="seg-tooltip">${seg.name} · ${Math.round(risk * 100)}%</div>`;
       bars.appendChild(item);
     });
     card.appendChild(bars);
 
-    // Expanded timeline (if this is selected)
+    // Expanded timeline
     if (rank === selectedCardIdx) {
       card.appendChild(buildTimeline(route));
     }
 
     // Click to select
-    card.addEventListener('click', () => {
-      selectedCardIdx = rank;
-      render();
-    });
+    card.addEventListener('click', () => { selectedCardIdx = rank; render(); });
     card.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { selectedCardIdx = rank; render(); }
     });
@@ -486,16 +406,15 @@ const UI = (() => {
       const col       = document.createElement('div');
       col.className   = 'tl-bar-col';
 
-      const bar = document.createElement('div');
+      const bar     = document.createElement('div');
       bar.className = `tl-bar ${level}`;
       bar.style.height = `${Math.max(heightPct, 4)}%`;
-      bar.style.width  = '100%';
 
-      const tip = document.createElement('div');
+      const tip       = document.createElement('div');
       tip.className   = 'tl-hover-tip';
       tip.textContent = `${d.time}: ${Math.round(d.score * 100)}%`;
 
-      const timeLabel = document.createElement('div');
+      const timeLabel       = document.createElement('div');
       timeLabel.className   = 'tl-time';
       timeLabel.textContent = i % 2 === 0 ? d.time : '';
 
@@ -509,49 +428,54 @@ const UI = (() => {
     return wrap;
   }
 
-  // ---- Event bindings ----
+  // ---- Mode toggle (syncs desktop + mobile) ----
+
+  function syncModeButtons() {
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      const isActive = btn.dataset.mode === currentMode;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
+    });
+  }
 
   function bindModeToggle() {
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         currentMode = btn.dataset.mode;
-        document.querySelectorAll('.mode-btn').forEach(b => {
-          b.classList.toggle('active', b === btn);
-          b.setAttribute('aria-pressed', String(b === btn));
-        });
         selectedCardIdx = 0;
+        syncModeButtons();
         render();
       });
     });
   }
 
+  // ---- Simulation ----
+
   function bindSimulation() {
-    const slider   = document.getElementById('departure-slider');
-    const display  = document.getElementById('sim-display-text');
-    const presets  = document.querySelectorAll('.preset-btn');
+    const slider  = document.getElementById('departure-slider');
+    const display = document.getElementById('sim-display-text');
+    const presets = document.querySelectorAll('.preset-btn');
+    const simDisp = document.getElementById('sim-display');
 
     function update(val) {
       departureOffset = Number(val);
       slider.value    = departureOffset;
 
-      // Update display text
       display.textContent = departureOffset === 0
         ? 'Leaving now'
         : `Leaving in ${departureOffset} minutes`;
 
-      // Update sim-display border color
-      const simDisp = document.getElementById('sim-display');
-      simDisp.style.borderColor = departureOffset > 0
-        ? 'rgba(217,119,6,0.4)'
-        : 'rgba(59,130,246,0.2)';
-      simDisp.style.background = departureOffset > 0
-        ? 'rgba(217,119,6,0.07)'
-        : 'rgba(59,130,246,0.08)';
-      document.getElementById('sim-display-text').style.color = departureOffset > 0
-        ? 'var(--risk-mod)'
-        : 'var(--blue-light)';
+      // Visual feedback: amber tint when offset > 0
+      if (departureOffset > 0) {
+        simDisp.style.borderColor = '#fde68a';
+        simDisp.style.background  = '#fffbeb';
+        display.style.color       = '#d97706';
+      } else {
+        simDisp.style.borderColor = '';
+        simDisp.style.background  = '';
+        display.style.color       = '';
+      }
 
-      // Sync presets
       presets.forEach(p => {
         const match = Number(p.dataset.offset) === departureOffset;
         p.classList.toggle('active', match);
@@ -562,10 +486,7 @@ const UI = (() => {
     }
 
     slider.addEventListener('input', () => update(slider.value));
-
-    presets.forEach(p => {
-      p.addEventListener('click', () => update(p.dataset.offset));
-    });
+    presets.forEach(p => p.addEventListener('click', () => update(p.dataset.offset)));
   }
 
   // ---- Init ----
@@ -574,15 +495,10 @@ const UI = (() => {
     bindModeToggle();
     bindSimulation();
     render();
-
-    // Live clock update every 60s
     setInterval(render, 60_000);
   }
 
   return { init };
 })();
 
-/* ============================================================
-   Boot
-   ============================================================ */
 document.addEventListener('DOMContentLoaded', UI.init);
