@@ -6,15 +6,15 @@
 
 ## 🎯 Challenge Vertical
 
-**Urban Safety** — Route safety intelligence for night-time and late-evening urban commuters.
+**Urban Safety** — Route safety intelligence for urban commuters.
 
 ---
 
 ## 💡 Problem Statement
 
-Urban commuters—especially those travelling late at night—face unpredictable safety risks due to changing crowd levels, poor lighting, and isolated road segments. Existing navigation tools show directions, not danger.
+Urban commuters face unpredictable safety risks due to changing crowd levels, poor lighting, and isolated road segments. Existing navigation tools show directions, not danger.
 
-**SafeRoute AI** solves this by adding a *time dimension* to route safety. It doesn't just score routes; it **predicts when they become unsafe**, giving commuters the intelligence to decide—not just the direction.
+**SafeRoute AI** adds a *time dimension* to route safety. It doesn't just score routes — it **predicts when they become unsafe**, giving commuters the intelligence to decide, not just the direction.
 
 ---
 
@@ -22,83 +22,101 @@ Urban commuters—especially those travelling late at night—face unpredictable
 
 | Feature | Description |
 |---|---|
-| 🔮 **Future Risk Prediction** | Projects route safety 60 minutes ahead in 5-minute intervals |
-| 🎯 **Confidence Score** | Measures reliability using segment-risk variance: `confidence = 1 − σ(segmentRisks)` |
-| 🧭 **Decision Mode Toggle** | Switch between Fastest / Balanced / Safest — changes recommendation logic |
-| ⚠️ **Critical Segment Alerts** | Pinpoints the *exact* dangerous road segment and explains why |
-| ⏩ **"Leave Later" Simulation** | Recalculates all risks shifted +20 minutes — shows predictive impact |
-| 🤖 **AI Explanation Engine** | Human-readable rationale for every recommendation with risk maths |
+| 🗺️ **Real Google Maps** | Live map with actual routes via Directions API |
+| 📍 **Auto Location Detection** | Geolocation API detects your position automatically |
+| 🔍 **Places Autocomplete** | Type any destination with Google Places search |
+| 🔮 **Future Risk Prediction** | Projects route safety 2 hours ahead in 15-min intervals |
+| 🎯 **Confidence Score** | Measures reliability: `confidence = 1 − σ²(segmentRisks) × 4` |
+| 🧭 **Decision Mode Toggle** | Switch between Fastest / Balanced / Safest |
+| ⚠️ **Critical Segment Alerts** | Pinpoints risky road segments with reasons |
+| ⏱️ **Departure Simulation** | Slider: "What if I leave later?" — recalculates all risks |
 
 ---
 
 ## 🧠 Approach & Logic
 
-### Architecture (Pure Frontend, No Backend)
+### Architecture
 
 ```
-RouteDataStore  →  Simulated urban segments (lighting, crowd, isolation)
-     ↓
-RiskEngine      →  Composite risk score per segment per hour
-     ↓
-TimelineEngine  →  12-tick × 5-min forecast for 60-minute window
-     ↓
-ConfidenceEngine→  Segment variance → reliability score
-     ↓
-AnalysisEngine  →  Picks recommended route by decision mode
-     ↓
-UIController    →  Renders cards, timeline chart, alerts, explanation
+User Input (Origin + Destination)
+        ↓
+Google Directions API → Fetches 2-3 real alternative routes
+        ↓
+Risk Engine (our intelligence layer)
+  ├── Analyses each route step by step
+  ├── Scores: road type, lighting heuristics, crowd decay, isolation
+  ├── Applies time-of-day multiplier (night = 1.8×, morning = 0.7×)
+  ├── Computes confidence from segment variance
+  └── Projects risk 2 hours into the future
+        ↓
+UI renders: route cards, risk timeline, critical alerts
+        ↓
+Google Maps renders: color-coded routes on live map
 ```
 
-### Risk Formula
-
-Each road segment is scored using three factors:
+### Risk Formula (per route step)
 
 ```
-segmentRisk = (1 − lighting)   × 0.35
-            + (1 − crowd(t))   × 0.35
-            + isolation        × 0.30
-            + nightPenalty(t)
+stepRisk = (baseRisk × 0.30 + (1-lighting) × 0.25 + (1-crowd) × 0.20
+          + isolation × 0.15 + distanceFactor × 0.10) × timeMultiplier
 ```
 
-**Time-aware crowd decay:**
+**Road type heuristics** (derived from Directions API step instructions):
 
-| Time Window | Crowd Multiplier |
-|---|---|
-| 07:00–10:00 | 100% (Morning rush) |
-| 10:00–16:00 | 75% (Daytime) |
-| 16:00–20:00 | 90% (Evening rush) |
-| 20:00–22:00 | 50% (Early night) |
-| 22:00–02:00 | 20% (Late night) |
-| 02:00–07:00 | 10% (Dead of night) |
+| Road Type Keywords | Base Risk | Lighting | Isolation |
+|---|---|---|---|
+| Highway, NH, Expressway | 0.12 | 0.85 | 0.10 |
+| Main Road, MG Road, Ring Road | 0.18 | 0.80 | 0.15 |
+| Park, Garden, Lake | 0.50 | 0.35 | 0.70 |
+| Cross, Lane, Layout | 0.40 | 0.45 | 0.55 |
+| Underpass, Flyover | 0.45 | 0.40 | 0.60 |
 
-Night penalty (+0.20 after 21:00) models increased vulnerability.
+**Time multipliers:**
+
+| Period | Multiplier | Reason |
+|---|---|---|
+| 06:00–10:00 | 0.70 | Morning rush (more people = safer) |
+| 10:00–18:00 | 0.85 | Daytime |
+| 18:00–20:00 | 1.10 | Dusk |
+| 20:00–22:00 | 1.40 | Evening |
+| 22:00–05:00 | 1.80 | Late night (highest risk) |
 
 ### Decision Modes
 
 - **Safest**: Minimises `riskScore`
-- **Fastest**: Minimises `duration`
-- **Balanced**: Minimises `0.6 × riskScore + 0.4 × (duration/25)`
+- **Fastest**: Minimises `estimatedMinutes`
+- **Balanced**: Minimises `0.6 × riskScore + 0.4 × (duration/60)`
 
-### Confidence Score
+### What makes this "Advanced"
 
-```
-confidence = 1 − (σ(segmentRisks) / 0.5)
-```
+> We take Google's routes → override with predictive safety logic.
 
-A route with uniformly safe segments → high confidence.  
-A route with mixed safe/risky segments → low confidence (deceptive average).
+Google gives directions. We give **safety intelligence on top**.
+
+---
+
+## 🔗 Google Services Integration
+
+| Service | Purpose | How Used |
+|---|---|---|
+| **Maps JavaScript API** | Render interactive map | Base map, route polylines, markers |
+| **Directions API** | Fetch real routes | Multiple alternatives with step-by-step data |
+| **Geolocation API** | Detect user position | Auto-fill origin, center map |
+| **Places API** | Autocomplete search | Destination input with suggestions |
+| **Geocoding API** | Reverse geocode | Convert lat/lng to readable address |
+| **Google Fonts** | Typography | Plus Jakarta Sans, Inter, JetBrains Mono |
 
 ---
 
 ## 🗺️ How the Solution Works
 
-1. **Select** origin, destination, departure time, and decision mode
-2. **Click "Analyze Routes"** — the engine scores 3 simulated routes across 4 segments each
-3. **View Route Cards** — risk level, confidence, duration, and future prediction tag
-4. **Check Timeline** — hover each bar to see exact risk % at each 5-minute interval
-5. **Read Critical Alerts** — pinpointed dangerous segments with explanations
-6. **Click "Leave 20 mins later?"** — watch risk projections shift and recommendations potentially change
-7. **Read the AI Explanation** — full rationale in plain English
+1. **Open the app** → Location auto-detected, map centers on you
+2. **Type a destination** → Places Autocomplete suggests locations
+3. **Click "Find Routes"** → Directions API fetches 2-3 real routes
+4. **View Route Cards** → Each scored with risk level, confidence, duration
+5. **Click a card** → Expands 2-hour risk forecast timeline
+6. **Drag the slider** → "What if I leave 30 min later?" — all risks recalculate
+7. **Switch modes** → Fastest/Balanced/Safest changes the recommendation
 
 ---
 
@@ -107,21 +125,22 @@ A route with mixed safe/risky segments → low confidence (deceptive average).
 | Layer | Technology |
 |---|---|
 | Frontend | HTML5, Vanilla CSS, Vanilla JavaScript (ES6+) |
-| Fonts | Google Fonts (Inter + JetBrains Mono) |
-| Data | Simulated urban segment data (rule-based engine) |
+| Maps | Google Maps JavaScript API |
+| Routes | Google Directions API |
+| Search | Google Places API (Autocomplete) |
+| Location | Browser Geolocation API + Google Geocoding |
+| Fonts | Google Fonts (Plus Jakarta Sans, Inter, JetBrains Mono) |
 | Hosting | Static — no server required |
-
-> **Google Services integration:** Google Fonts API is used for typography (Inter & JetBrains Mono). The architecture is designed to be extended with Google Maps Routes API and Google Places API for real segment data without changing the core risk engine.
 
 ---
 
 ## 📐 Assumptions
 
-1. Urban road network is modelled as **discrete segments** with fixed physical properties (lighting, isolation level)
-2. **Crowd density** follows a realistic daily pattern (rush hours + night decay) derived from general urban mobility research
-3. **Three representative routes** are simulated (safe highway, mixed market, risky shortcut) — representative of real urban tradeoffs
-4. Safety analysis is **time-sensitive** but not GPS-dependent for the prototype
-5. A night-time penalty of +20% risk is applied uniformly after 21:00 to model reduced ambient safety
+1. Route safety is **estimated heuristically** from road type keywords in Directions API step instructions (no real crime/lighting data in prototype)
+2. **Time-of-day** is the primary risk factor — late night routes are scored significantly riskier
+3. **Crowd density decay** follows a simplified model (rush hours = safe, 2 AM = risky)
+4. The system is designed for **Indian cities** (component restriction set to India, default center: Bangalore)
+5. **3 alternative routes** are requested from Directions API for meaningful comparison
 
 ---
 
@@ -129,9 +148,10 @@ A route with mixed safe/risky segments → low confidence (deceptive average).
 
 ```
 PromptWars-X-DSU-winner-/
-├── index.html      # App shell, semantic HTML5
-├── styles.css      # Full design system (dark, glassmorphism, animations)
-├── script.js       # Risk engine, timeline, confidence, UI controller
+├── index.html      # App shell, Google Maps API loader, Places inputs
+├── styles.css      # Light trustworthy theme, full mobile responsive
+├── script.js       # Risk engine + Google Maps integration + UI
+├── .gitignore      # Excludes reference folder
 └── README.md       # This file
 ```
 
@@ -139,27 +159,25 @@ PromptWars-X-DSU-winner-/
 
 ## 🏃 Running Locally
 
-No build step needed. Simply open `index.html` in any modern browser:
+No build step. Open `index.html` in any modern browser:
 
 ```bash
-# Option 1: Direct open
 start index.html
-
-# Option 2: Quick local server
-npx serve .
 ```
+
+> **Note:** Google Maps API requires an internet connection. The API key has HTTP referrer restrictions for security.
 
 ---
 
 ## 🧪 Test Scenarios
 
-| Scenario | Expected Behaviour |
+| Scenario | Expected |
 |---|---|
-| Depart at 22:30, Safest mode | Route B recommended; Route A flagged for Canal Road Underpass |
-| Depart at 08:00, Fastest mode | Route C recommended (shortest); risk acceptable in morning |
-| Click "Leave 20 mins later" | Risk levels increase; recommendation may change to Route B |
-| Switch to Balanced mode | Recommendation blends risk and duration |
-| Switch to Fastest mode | Route C (5.1 km) recommended despite risk |
+| Allow location → type "Bangalore Airport" → Find Routes | 2-3 routes shown, risk-scored, map rendered |
+| Drag slider to +60 min | Risk levels shift, recommendation may change |
+| Switch to Fastest mode | Shortest route recommended despite higher risk |
+| Search at 2 PM vs 11 PM | Same routes, very different risk scores |
+| Deny location → type both origin and destination | Works with manual input |
 
 ---
 

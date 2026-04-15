@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SafeRoute AI – Predictive Risk Navigator</title>
-  <meta name="description" content="AI-powered urban route safety predictor that tells you not just the safest route, but when a route becomes unsafe." />
+  <meta name="description" content="AI-powered urban route safety predictor. It doesn't just tell you the safest route — it tells you when a route becomes unsafe." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -26,15 +26,15 @@
       </div>
 
       <div class="header-right">
-        <div class="live-badge" aria-label="Live simulation active">
+        <div class="live-badge" aria-label="Live data active">
           <span class="pulse-dot" aria-hidden="true"></span>
           <span>Live</span>
         </div>
         <!-- Desktop mode toggle -->
         <div class="mode-toggle" role="group" aria-label="Decision mode" id="header-mode-toggle">
-          <button class="mode-btn" data-mode="fastest" aria-pressed="false" id="mode-fastest">⚡ Fastest</button>
-          <button class="mode-btn" data-mode="balanced" aria-pressed="false" id="mode-balanced">⚖️ Balanced</button>
-          <button class="mode-btn active" data-mode="safest" aria-pressed="true" id="mode-safest">🛡️ Safest</button>
+          <button class="mode-btn" data-mode="fastest" aria-pressed="false">⚡ Fastest</button>
+          <button class="mode-btn" data-mode="balanced" aria-pressed="false">⚖️ Balanced</button>
+          <button class="mode-btn active" data-mode="safest" aria-pressed="true">🛡️ Safest</button>
         </div>
       </div>
     </div>
@@ -43,7 +43,7 @@
   <!-- ===== MAIN ===== -->
   <main class="main" role="main">
 
-    <!-- Mobile mode toggle (shown on small screens) -->
+    <!-- Mobile mode toggle -->
     <div class="mode-toggle mode-toggle-mobile" role="group" aria-label="Decision mode" id="mobile-mode-toggle">
       <button class="mode-btn" data-mode="fastest" aria-pressed="false">⚡ Fastest</button>
       <button class="mode-btn" data-mode="balanced" aria-pressed="false">⚖️ Balanced</button>
@@ -58,67 +58,48 @@
       </p>
     </div>
 
-    <!-- Main Grid: Map+Simulation | Routes -->
+    <!-- Search Bar -->
+    <div class="search-panel" aria-label="Route search">
+      <div class="search-row">
+        <div class="search-field">
+          <label class="search-label" for="input-origin">📍 Origin</label>
+          <input type="text" id="input-origin" class="search-input" placeholder="Your location (auto-detected)" autocomplete="off" />
+        </div>
+        <div class="search-field">
+          <label class="search-label" for="input-dest">🏁 Destination</label>
+          <input type="text" id="input-dest" class="search-input" placeholder="Search destination..." autocomplete="off" />
+        </div>
+        <button class="btn-search" id="btn-search" aria-label="Find safe routes">
+          🔍 Find Routes
+        </button>
+      </div>
+      <div class="search-status" id="search-status" role="status" aria-live="polite"></div>
+    </div>
+
+    <!-- Main Grid -->
     <div class="app-grid">
 
-      <!-- LEFT: Map + Simulation + Info bar -->
+      <!-- LEFT: Map + Simulation -->
       <div class="left-col">
 
-        <!-- SVG Route Map -->
-        <div class="map-card" aria-label="Route map visualization" role="img">
-          <svg id="route-map-svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-            <!-- Grid dots (light theme) -->
-            <defs>
-              <pattern id="grid" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
-                <circle cx="16" cy="16" r="1" fill="#e2e8f0" />
-              </pattern>
-            </defs>
-            <rect width="640" height="400" fill="url(#grid)" />
-
-            <!-- Route paths (drawn by JS) -->
-            <g id="map-routes"></g>
-
-            <!-- Start point -->
-            <g id="map-start">
-              <circle cx="80" cy="280" r="14" fill="rgba(37,99,235,0.12)" />
-              <circle cx="80" cy="280" r="8" fill="#2563eb" />
-              <circle cx="80" cy="280" r="3.5" fill="white" />
-              <text x="80" y="306" text-anchor="middle" fill="#64748b" font-size="10" font-family="Plus Jakarta Sans" font-weight="700" letter-spacing="1">START</text>
-            </g>
-
-            <!-- End point -->
-            <g id="map-end">
-              <circle cx="560" cy="130" r="14" fill="rgba(37,99,235,0.12)" />
-              <circle cx="560" cy="130" r="8" fill="#2563eb" />
-              <circle cx="560" cy="130" r="3.5" fill="white" />
-              <text x="560" y="156" text-anchor="middle" fill="#64748b" font-size="10" font-family="Plus Jakarta Sans" font-weight="700" letter-spacing="1">END</text>
-            </g>
-
-            <!-- Critical segment markers (drawn by JS) -->
-            <g id="map-critical-markers"></g>
-          </svg>
-
+        <!-- Google Map -->
+        <div class="map-card" id="map-container" aria-label="Route map">
+          <div id="google-map" class="google-map"></div>
           <!-- Map legend -->
-          <div class="map-legend" aria-label="Map legend">
-            <span><span class="legend-dot" style="background:#16a34a"></span> Low</span>
+          <div class="map-legend">
+            <span><span class="legend-dot" style="background:#16a34a"></span> Safe</span>
             <span><span class="legend-dot" style="background:#d97706"></span> Moderate</span>
-            <span><span class="legend-dot" style="background:#dc2626"></span> High</span>
+            <span><span class="legend-dot" style="background:#dc2626"></span> Risky</span>
           </div>
         </div>
 
-        <!-- Departure info bar -->
+        <!-- Info bar -->
         <div class="info-bar">
-          <span class="info-item">
-            📍 <span id="info-origin">MG Road</span> → <span id="info-dest">Destination</span>
-          </span>
-          <span class="info-sep" aria-hidden="true">|</span>
-          <span class="info-item">
-            🕐 Departure: <strong id="info-departure">—</strong>
-          </span>
-          <span class="info-sep" aria-hidden="true">|</span>
-          <span class="info-item">
-            🧭 Mode: <strong id="info-mode" class="mode-text">Safest</strong>
-          </span>
+          <span class="info-item">🕐 Departure: <strong id="info-departure">Now</strong></span>
+          <span class="info-sep">|</span>
+          <span class="info-item">🧭 Mode: <strong id="info-mode" class="mode-text">Safest</strong></span>
+          <span class="info-sep">|</span>
+          <span class="info-item">📊 Routes: <strong id="info-route-count">—</strong></span>
         </div>
 
         <!-- Simulation Panel -->
@@ -127,16 +108,16 @@
           <p class="sim-desc">"What if I leave later?" — See how risk changes over time.</p>
 
           <div class="slider-wrap">
-            <input type="range" id="departure-slider" min="0" max="120" step="5" value="0" class="dep-slider" aria-label="Departure offset in minutes" />
+            <input type="range" id="departure-slider" min="0" max="120" step="5" value="0" class="dep-slider" aria-label="Departure offset" />
             <div class="slider-labels"><span>Now</span><span>+30m</span><span>+1h</span><span>+2h</span></div>
           </div>
 
           <div class="sim-display" id="sim-display" aria-live="polite">
-            <span class="sim-icon" aria-hidden="true">🕐</span>
+            <span aria-hidden="true">🕐</span>
             <span id="sim-display-text" class="sim-display-text">Leaving now</span>
           </div>
 
-          <div class="sim-presets" role="group" aria-label="Quick preset offsets">
+          <div class="sim-presets" role="group" aria-label="Quick presets">
             <button class="preset-btn active" data-offset="0" aria-pressed="true">Now</button>
             <button class="preset-btn" data-offset="10" aria-pressed="false">+10m</button>
             <button class="preset-btn" data-offset="20" aria-pressed="false">+20m</button>
@@ -144,13 +125,18 @@
             <button class="preset-btn" data-offset="60" aria-pressed="false">+1h</button>
           </div>
         </div>
-
       </div>
 
       <!-- RIGHT: Route Cards -->
       <div class="right-col">
-        <h2 class="routes-heading">Route Analysis (<span id="route-count">3</span> routes)</h2>
-        <div id="routes-list" role="list" aria-label="Route analysis results"></div>
+        <h2 class="routes-heading">Route Analysis (<span id="route-count">0</span> routes)</h2>
+        <div id="routes-list" role="list" aria-label="Route analysis results">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-icon">🗺️</div>
+            <p class="empty-text">Enter a destination and click <strong>Find Routes</strong> to start safety analysis.</p>
+            <p class="empty-sub">Or allow location access for auto-detection.</p>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -158,9 +144,11 @@
   </main>
 
   <footer class="footer" role="contentinfo">
-    <p>SafeRoute AI · PromptWars Challenge · Simulated urban safety data · <strong>Not a replacement for emergency services</strong></p>
+    <p>SafeRoute AI · PromptWars Challenge · Powered by Google Maps · <strong>Not a replacement for emergency services</strong></p>
   </footer>
 
+  <!-- Google Maps JS API with Places library -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAVIXUHcRZWF4gTEmjNUPshQ6r3q6sNTrM&libraries=places&callback=onMapsReady" async defer></script>
   <script src="script.js"></script>
 </body>
 </html>
