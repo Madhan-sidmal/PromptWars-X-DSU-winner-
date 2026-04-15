@@ -102,6 +102,15 @@
           <span class="info-item">📊 Routes: <strong id="info-route-count">—</strong></span>
         </div>
 
+        <!-- Safety Assistance -->
+        <div class="panel safety-panel" aria-label="Safety assistance controls">
+          <div class="safety-controls">
+            <button class="btn-safety" id="btn-safety-mode" aria-pressed="false">Enable Safety Mode</button>
+            <button class="btn-emergency" id="btn-emergency">Emergency</button>
+          </div>
+          <p class="safety-status" id="safety-status" aria-live="polite">Safety mode is off.</p>
+        </div>
+
         <!-- Simulation Panel -->
         <div class="panel sim-panel" aria-label="Departure simulation">
           <h3 class="sim-title">⏱️ Departure Simulation</h3>
@@ -148,7 +157,7 @@
   </footer>
 
   <!-- Google Maps JS API with Places library -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAVIXUHcRZWF4gTEmjNUPshQ6r3q6sNTrM&libraries=places&callback=onMapsReady" async defer></script>
   <script src="script.js"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAVIXUHcRZWF4gTEmjNUPshQ6r3q6sNTrM&callback=onMapsReady&loading=async" async defer onerror="onMapsLoadError()"></script>
 </body>
 </html>

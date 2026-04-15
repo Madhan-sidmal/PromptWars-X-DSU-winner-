@@ -5,8 +5,8 @@
  * Flow:
  *  1. Google Maps renders base map
  *  2. Geolocation detects user position
- *  3. Places Autocomplete on destination input
- *  4. Directions API fetches up to 3 alternative routes
+ *  3. User enters origin/destination manually
+ *  4. Routes API fetches up to 3 alternative routes
  *  5. Risk Engine scores each route with time-aware safety analysis
  *  6. UI overlays intelligence on top of Google's routes
  */
@@ -16,11 +16,28 @@
 /* ============================================================
    GLOBALS (set by Google Maps callback)
    ============================================================ */
-let map, directionsService, directionsRenderers = [];
-let originAutocomplete, destAutocomplete;
+let map, routePolylines = [], routeMarkers = [];
 let userLocation = null;
 let currentRoutes = [];  // analysed route objects
 let rawDirectionsResults = [];  // raw Google route legs
+let liveUserMarker = null;
+
+function setStatus(message, type = 'loading') {
+  const statusEl = document.getElementById('search-status');
+  if (!statusEl) return;
+  statusEl.innerHTML = `<span class="status-${type}">${message}</span>`;
+}
+
+function onMapsLoadError() {
+  setStatus('⚠ Google Maps failed to load. Check API key, enabled APIs, and referrer restrictions.', 'error');
+}
+
+window.onMapsLoadError = onMapsLoadError;
+
+// Fired by Maps JS when key auth fails.
+window.gm_authFailure = function gmAuthFailure() {
+  setStatus('⚠ API key authentication failed. Verify the key and allowed HTTP referrers.', 'error');
+};
 
 /* ============================================================
    CONFIG
@@ -33,6 +50,147 @@ const ROUTE_COLORS = {
 };
 
 const DEFAULT_CENTER = { lat: 12.9716, lng: 77.5946 }; // Bangalore
+
+const ROUTES_API_ENDPOINT = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+
+function getMapsApiKey() {
+  const tag = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
+  if (!tag) return '';
+  try {
+    const url = new URL(tag.src);
+    return url.searchParams.get('key') || '';
+  } catch {
+    return '';
+  }
+}
+
+function parseDurationSeconds(durationStr) {
+  if (!durationStr || typeof durationStr !== 'string') return 0;
+  const m = durationStr.match(/^(\d+)s$/);
+  return m ? Number(m[1]) : 0;
+}
+
+function toLatLng(latLng) {
+  if (!latLng) return null;
+  const lat = latLng.lat ?? latLng.latitude;
+  const lng = latLng.lng ?? latLng.longitude;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+  return { lat, lng };
+}
+
+function decodePolyline(encoded) {
+  if (!encoded) return [];
+
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const coordinates = [];
+
+  while (index < encoded.length) {
+    let b;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lng += dlng;
+
+    coordinates.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+
+  return coordinates;
+}
+
+function normalizeRoutesFromComputeRoutes(apiRoutes) {
+  return (apiRoutes || []).map((route, idx) => {
+    const leg = (route.legs && route.legs[0]) || {};
+    const steps = (leg.steps || []).map((step, stepIdx) => ({
+      instructions: step.navigationInstruction && step.navigationInstruction.instructions
+        ? step.navigationInstruction.instructions
+        : `Segment ${stepIdx + 1}`,
+      distance: { value: step.distanceMeters || 0 },
+    }));
+
+    const overviewPath = decodePolyline(route.polyline && route.polyline.encodedPolyline);
+
+    const startLocation = toLatLng(leg.startLocation && leg.startLocation.latLng) || overviewPath[0] || DEFAULT_CENTER;
+    const endLocation = toLatLng(leg.endLocation && leg.endLocation.latLng) || overviewPath[overviewPath.length - 1] || DEFAULT_CENTER;
+
+    const fallbackDistance = steps.reduce((sum, s) => sum + (s.distance.value || 0), 0);
+    const distanceMeters = route.distanceMeters || fallbackDistance;
+    const durationSeconds = parseDurationSeconds(route.duration);
+
+    return {
+      summary: route.description || `Route ${String.fromCharCode(65 + idx)}`,
+      legs: [{
+        distance: { value: distanceMeters },
+        duration: { value: durationSeconds },
+        steps,
+        start_location: startLocation,
+        end_location: endLocation,
+      }],
+      overview_path: overviewPath,
+    };
+  });
+}
+
+async function computeRoutes(origin, destination) {
+  const apiKey = getMapsApiKey();
+  if (!apiKey) {
+    throw new Error('Missing API key in Maps loader URL.');
+  }
+
+  const payload = {
+    origin: { address: origin },
+    destination: { address: destination },
+    travelMode: 'DRIVE',
+    computeAlternativeRoutes: true,
+    languageCode: 'en-US',
+    units: 'METRIC',
+  };
+
+  const response = await fetch(ROUTES_API_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': [
+        'routes.description',
+        'routes.duration',
+        'routes.distanceMeters',
+        'routes.polyline.encodedPolyline',
+        'routes.legs.startLocation',
+        'routes.legs.endLocation',
+        'routes.legs.steps.distanceMeters',
+        'routes.legs.steps.navigationInstruction.instructions',
+      ].join(','),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const msg = data && data.error && data.error.message
+      ? data.error.message
+      : `Routes API request failed (${response.status})`;
+    throw new Error(msg);
+  }
+
+  return normalizeRoutesFromComputeRoutes(data.routes || []);
+}
 
 /* ============================================================
    1. RISK ENGINE (time-aware, overlays on any route)
@@ -197,6 +355,11 @@ const RiskEngine = (() => {
    ============================================================ */
 
 function onMapsReady() {
+  if (!window.google || !google.maps) {
+    setStatus('⚠ Google Maps is unavailable in this environment.', 'error');
+    return;
+  }
+
   // Init map
   map = new google.maps.Map(document.getElementById('google-map'), {
     center: DEFAULT_CENTER,
@@ -211,21 +374,7 @@ function onMapsReady() {
     ],
   });
 
-  directionsService = new google.maps.DirectionsService();
-
-  // Init Places Autocomplete
-  const originInput = document.getElementById('input-origin');
-  const destInput   = document.getElementById('input-dest');
-
-  originAutocomplete = new google.maps.places.Autocomplete(originInput, {
-    types: ['geocode', 'establishment'],
-    componentRestrictions: { country: 'in' },
-  });
-
-  destAutocomplete = new google.maps.places.Autocomplete(destInput, {
-    types: ['geocode', 'establishment'],
-    componentRestrictions: { country: 'in' },
-  });
+  // Legacy Places Autocomplete is intentionally not used to avoid deprecation warnings.
 
   // Auto-detect user location
   detectLocation();
@@ -268,7 +417,7 @@ function detectLocation() {
       });
 
       // Add user marker
-      new google.maps.Marker({
+      liveUserMarker = new google.maps.Marker({
         position: userLocation,
         map: map,
         icon: {
@@ -289,53 +438,232 @@ function detectLocation() {
   );
 }
 
+function haversineMeters(a, b) {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function minDistanceToPathMeters(point, path) {
+  if (!path || path.length === 0) return Infinity;
+  let minDist = Infinity;
+  for (const pathPoint of path) {
+    const d = haversineMeters(point, pathPoint);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+const SafetyAssist = (() => {
+  let enabled = false;
+  let watchId = null;
+  let selectedRoute = null;
+  let deviationAlerted = false;
+  let criticalAlerted = false;
+
+  function setSafetyStatus(message, level = 'normal') {
+    const el = document.getElementById('safety-status');
+    if (!el) return;
+    el.textContent = message;
+    el.style.color = level === 'error' ? '#dc2626' : level === 'success' ? '#16a34a' : '';
+  }
+
+  function syncSafetyButton() {
+    const btn = document.getElementById('btn-safety-mode');
+    if (!btn) return;
+    btn.classList.toggle('active', enabled);
+    btn.setAttribute('aria-pressed', String(enabled));
+    btn.textContent = enabled ? 'Safety Mode Active' : 'Enable Safety Mode';
+  }
+
+  function updateLiveMarker(position) {
+    if (!map) return;
+
+    if (!liveUserMarker) {
+      liveUserMarker = new google.maps.Marker({
+        position,
+        map,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#2563eb',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 3,
+        },
+        title: 'Live position',
+      });
+      return;
+    }
+
+    liveUserMarker.setPosition(position);
+  }
+
+  function runSafetyChecks(position) {
+    if (!selectedRoute || !selectedRoute.googleRoute) return;
+
+    const path = selectedRoute.googleRoute.overview_path || [];
+    const minDist = minDistanceToPathMeters(position, path);
+
+    if (minDist > 120) {
+      setSafetyStatus("Warning: you've deviated from the safer route.", 'error');
+      if (!deviationAlerted) {
+        setStatus('⚠ You have deviated from the safer route. Return to the highlighted path.', 'error');
+        deviationAlerted = true;
+      }
+      return;
+    }
+
+    deviationAlerted = false;
+
+    if (!criticalAlerted && selectedRoute.criticalSegments && selectedRoute.criticalSegments.length > 0) {
+      const nextRisk = selectedRoute.criticalSegments[0];
+      setStatus(`⚠ Risk zone ahead: ${nextRisk.reason}.`, 'error');
+      criticalAlerted = true;
+    }
+
+    setSafetyStatus('Safety monitoring active: on-route and tracking live location.', 'success');
+  }
+
+  function onPosition(positionEvent) {
+    const position = {
+      lat: positionEvent.coords.latitude,
+      lng: positionEvent.coords.longitude,
+    };
+    userLocation = position;
+    updateLiveMarker(position);
+    runSafetyChecks(position);
+  }
+
+  function onPositionError() {
+    setSafetyStatus('Unable to track location for safety monitoring.', 'error');
+  }
+
+  function startMonitoring() {
+    if (!enabled) return;
+
+    if (!navigator.geolocation) {
+      setSafetyStatus('Geolocation is not available on this device.', 'error');
+      return;
+    }
+
+    if (!selectedRoute) {
+      setSafetyStatus('Select a route card to activate live safety monitoring.', 'error');
+      return;
+    }
+
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+    }
+
+    watchId = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 10000,
+    });
+
+    setSafetyStatus('Safety mode is active and monitoring your route.', 'success');
+  }
+
+  function stopMonitoring() {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    setSafetyStatus('Safety mode is off.');
+  }
+
+  function setSelectedRoute(route) {
+    selectedRoute = route || null;
+    deviationAlerted = false;
+    criticalAlerted = false;
+    if (enabled) startMonitoring();
+  }
+
+  function toggleMode() {
+    enabled = !enabled;
+    syncSafetyButton();
+    if (enabled) {
+      startMonitoring();
+    } else {
+      stopMonitoring();
+    }
+  }
+
+  function triggerEmergency() {
+    const posText = userLocation
+      ? `${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}`
+      : 'location unavailable';
+    setSafetyStatus('Emergency alert simulated. Trusted contact notified.', 'error');
+    setStatus(`🚨 Emergency triggered (simulated). Live location: ${posText}`, 'error');
+  }
+
+  function bindControls() {
+    const modeBtn = document.getElementById('btn-safety-mode');
+    const emergencyBtn = document.getElementById('btn-emergency');
+
+    if (modeBtn) modeBtn.addEventListener('click', toggleMode);
+    if (emergencyBtn) emergencyBtn.addEventListener('click', triggerEmergency);
+  }
+
+  function init() {
+    bindControls();
+    syncSafetyButton();
+    setSafetyStatus('Safety mode is off.');
+  }
+
+  return { init, setSelectedRoute };
+})();
+
 /* ============================================================
    4. DIRECTIONS + RISK ANALYSIS
    ============================================================ */
 
-function findRoutes(origin, destination) {
-  const statusEl = document.getElementById('search-status');
+async function findRoutes(origin, destination) {
   const btnSearch = document.getElementById('btn-search');
 
   if (!origin || !destination) {
-    statusEl.innerHTML = '<span class="status-error">⚠ Please enter both origin and destination.</span>';
+    setStatus('⚠ Please enter both origin and destination.', 'error');
     return;
   }
 
-  statusEl.innerHTML = '<span class="status-loading">🔍 Fetching routes & analyzing safety...</span>';
+  setStatus('🔍 Fetching routes & analyzing safety...', 'loading');
   btnSearch.disabled = true;
 
-  // Clear old renderers
-  directionsRenderers.forEach(r => r.setMap(null));
-  directionsRenderers = [];
+  routePolylines.forEach(poly => poly.setMap(null));
+  routePolylines = [];
+  routeMarkers.forEach(marker => marker.setMap(null));
+  routeMarkers = [];
 
-  directionsService.route(
-    {
-      origin: origin,
-      destination: destination,
-      travelMode: google.maps.TravelMode.DRIVING,
-      provideRouteAlternatives: true,
-      unitSystem: google.maps.UnitSystem.METRIC,
-    },
-    (result, status) => {
-      btnSearch.disabled = false;
+  try {
+    const routes = await computeRoutes(origin, destination);
+    btnSearch.disabled = false;
 
-      if (status !== 'OK' || !result.routes || result.routes.length === 0) {
-        statusEl.innerHTML = `<span class="status-error">⚠ No routes found (${status}). Try different locations.</span>`;
-        return;
-      }
-
-      rawDirectionsResults = result.routes;
-      statusEl.innerHTML = `<span class="status-success">✓ ${result.routes.length} route(s) found. Analyzing safety...</span>`;
-
-      // Analyse and render
-      analyseAndRender(result);
-
-      setTimeout(() => {
-        statusEl.innerHTML = `<span class="status-success">✓ Analysis complete — ${currentRoutes.length} routes scored.</span>`;
-      }, 300);
+    if (!routes || routes.length === 0) {
+      setStatus('⚠ No routes found. Try different locations.', 'error');
+      return;
     }
-  );
+
+    rawDirectionsResults = routes;
+    setStatus(`✓ ${routes.length} route(s) found. Analyzing safety...`, 'success');
+    analyseAndRender({ routes });
+
+    setTimeout(() => {
+      setStatus(`✓ Analysis complete - ${currentRoutes.length} routes scored.`, 'success');
+    }, 300);
+  } catch (err) {
+    btnSearch.disabled = false;
+    const msg = err && err.message ? err.message : 'Failed to fetch routes.';
+    setStatus(`⚠ ${msg}`, 'error');
+  }
 }
 
 function analyseAndRender(directionsResult) {
@@ -405,43 +733,40 @@ function analyseAndRender(directionsResult) {
 }
 
 function renderRoutesOnMap(routes) {
-  // Clear old
-  directionsRenderers.forEach(r => r.setMap(null));
-  directionsRenderers = [];
+  routePolylines.forEach(poly => poly.setMap(null));
+  routePolylines = [];
+  routeMarkers.forEach(marker => marker.setMap(null));
+  routeMarkers = [];
 
   routes.forEach((route, idx) => {
     const color = ROUTE_COLORS[route.riskLevel] || '#2563eb';
     const isTop = idx === 0;
+    const path = (route.googleRoute && route.googleRoute.overview_path) || [];
 
-    const renderer = new google.maps.DirectionsRenderer({
-      map: map,
-      directions: { routes: rawDirectionsResults, request: {} },
-      routeIndex: route.id,  // original index in Google results
-      suppressMarkers: false,
-      preserveViewport: idx > 0,
-      polylineOptions: {
+    if (path.length > 0) {
+      const polyline = new google.maps.Polyline({
+        map,
+        path,
         strokeColor: color,
         strokeWeight: isTop ? 6 : 3,
         strokeOpacity: isTop ? 0.9 : 0.35,
-      },
-    });
+      });
+      routePolylines.push(polyline);
+    }
 
-    // Fix: set the directions result properly
-    const fakeResult = {
-      routes: [rawDirectionsResults[route.id]],
-      geocoded_waypoints: [],
-    };
-
-    renderer.setDirections({
-      ...fakeResult,
-      request: {
-        origin: rawDirectionsResults[route.id].legs[0].start_location,
-        destination: rawDirectionsResults[route.id].legs[0].end_location,
-        travelMode: 'DRIVING',
-      },
-    });
-
-    directionsRenderers.push(renderer);
+    if (isTop && route.googleRoute && route.googleRoute.legs && route.googleRoute.legs[0]) {
+      const leg = route.googleRoute.legs[0];
+      routeMarkers.push(new google.maps.Marker({
+        map,
+        position: leg.start_location,
+        label: 'A',
+      }));
+      routeMarkers.push(new google.maps.Marker({
+        map,
+        position: leg.end_location,
+        label: 'B',
+      }));
+    }
   });
 
   // Fit bounds to first route
@@ -495,6 +820,7 @@ const UI = (() => {
     }
 
     routes.forEach((route, rank) => list.appendChild(buildCard(route, rank)));
+    SafetyAssist.setSelectedRoute(routes[selectedCardIdx] || null);
     updateInfoBar();
   }
 
@@ -556,6 +882,7 @@ const UI = (() => {
     card.addEventListener('click', () => {
       selectedCardIdx = rank;
       renderCards(currentRoutes);
+      SafetyAssist.setSelectedRoute(currentRoutes[selectedCardIdx] || null);
       // Highlight on map
       renderRoutesOnMap(currentRoutes);
     });
@@ -688,9 +1015,14 @@ const UI = (() => {
 
   // ---- Init ----
   function init() {
+    if (window.location.protocol === 'file:') {
+      setStatus('⚠ Running from file:// may break Maps security checks. Use a local HTTP server.', 'error');
+    }
+
     bindModeToggle();
     bindSimulation();
     bindSearch();
+    SafetyAssist.init();
     updateInfoBar();
   }
 

@@ -1,0 +1,12 @@
+{
+  "name": "saferoute-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SafeRoute AI static app server for Cloud Run",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
