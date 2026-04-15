@@ -1,0 +1,10 @@
+# Reference folder - not part of submission
+predictive-route-guard-main/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
