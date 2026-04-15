@@ -224,6 +224,12 @@ body {
   padding:8px 12px;
   cursor:pointer;
   transition:all .15s;
+  min-height: 42px;
+}
+
+.safety-controls .btn-safety,
+.safety-controls .btn-emergency {
+  flex: 1;
 }
 
 .btn-safety {
@@ -369,6 +375,8 @@ body {
   .logo-sub { display:none; }
   .search-row { flex-direction:column; }
   .btn-search { width:100%; }
+  .google-map { height: 320px; }
+  .right-col { margin-top: 2px; }
 }
 @media (max-width:900px) {
   .mode-toggle-mobile { display:flex !important; justify-content:center; gap:2px; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm); padding:3px; }
@@ -402,6 +410,8 @@ body {
   .sim-panel { padding:10px 12px; }
   .safety-panel { padding:10px 12px; }
   .safety-controls { flex-direction:column; }
+  .btn-safety,
+  .btn-emergency { width:100%; }
   .sim-title { font-size:10px; }
   .sim-desc { font-size:10px; }
   .preset-btn { padding:4px 10px; font-size:10px; }

@@ -181,12 +181,26 @@ async function computeRoutes(origin, destination) {
     body: JSON.stringify(payload),
   });
 
-  const data = await response.json();
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
   if (!response.ok) {
-    const msg = data && data.error && data.error.message
+    const rawMsg = data && data.error && data.error.message
       ? data.error.message
       : `Routes API request failed (${response.status})`;
-    throw new Error(msg);
+
+    if (/not been used|disabled|enable/i.test(rawMsg)) {
+      throw new Error('Routes API is not enabled for this key/project. Enable Routes API in Google Cloud and retry.');
+    }
+    if (/api key|permission|forbidden|denied/i.test(rawMsg)) {
+      throw new Error('API key rejected for Routes API. Verify key restrictions and enabled APIs.');
+    }
+
+    throw new Error(rawMsg);
   }
 
   return normalizeRoutesFromComputeRoutes(data.routes || []);
@@ -462,12 +476,40 @@ function minDistanceToPathMeters(point, path) {
   return minDist;
 }
 
+function nearestPathIndex(point, path) {
+  if (!path || path.length === 0) return -1;
+  let idx = 0;
+  let minDist = Infinity;
+  for (let i = 0; i < path.length; i += 1) {
+    const d = haversineMeters(point, path[i]);
+    if (d < minDist) {
+      minDist = d;
+      idx = i;
+    }
+  }
+  return idx;
+}
+
+function buildPathDistanceIndex(path) {
+  if (!path || path.length === 0) return { cumulative: [0], total: 0 };
+  const cumulative = [0];
+  let total = 0;
+
+  for (let i = 1; i < path.length; i += 1) {
+    total += haversineMeters(path[i - 1], path[i]);
+    cumulative.push(total);
+  }
+
+  return { cumulative, total };
+}
+
 const SafetyAssist = (() => {
   let enabled = false;
   let watchId = null;
   let selectedRoute = null;
+  let autoActivatedOnce = false;
   let deviationAlerted = false;
-  let criticalAlerted = false;
+  let criticalAlertedStep = -1;
 
   function setSafetyStatus(message, level = 'normal') {
     const el = document.getElementById('safety-status');
@@ -512,6 +554,13 @@ const SafetyAssist = (() => {
 
     const path = selectedRoute.googleRoute.overview_path || [];
     const minDist = minDistanceToPathMeters(position, path);
+    const nearestIdx = nearestPathIndex(position, path);
+    const pathIndex = selectedRoute.pathDistanceIndex || { cumulative: [0], total: 0 };
+    const traveledPathMeters = nearestIdx >= 0 ? (pathIndex.cumulative[nearestIdx] || 0) : 0;
+    const pathTotal = Math.max(pathIndex.total || 1, 1);
+    const traveledRouteMeters = (traveledPathMeters / pathTotal) * Math.max(selectedRoute.totalRouteMeters || 1, 1);
+    const remainingRouteMeters = Math.max(0, Math.max(selectedRoute.totalRouteMeters || 1, 1) - traveledRouteMeters);
+    const remainingMinutes = Math.max(1, Math.round((remainingRouteMeters / Math.max(selectedRoute.totalRouteMeters || 1, 1)) * selectedRoute.estimatedMinutes));
 
     if (minDist > 120) {
       setSafetyStatus("Warning: you've deviated from the safer route.", 'error');
@@ -524,13 +573,18 @@ const SafetyAssist = (() => {
 
     deviationAlerted = false;
 
-    if (!criticalAlerted && selectedRoute.criticalSegments && selectedRoute.criticalSegments.length > 0) {
-      const nextRisk = selectedRoute.criticalSegments[0];
-      setStatus(`⚠ Risk zone ahead: ${nextRisk.reason}.`, 'error');
-      criticalAlerted = true;
+    if (selectedRoute.criticalSegments && selectedRoute.criticalSegments.length > 0) {
+      const upcoming = selectedRoute.criticalSegments.find((segment) => segment.atMeters > traveledRouteMeters + 10);
+      if (upcoming) {
+        const aheadMeters = Math.max(0, Math.round(upcoming.atMeters - traveledRouteMeters));
+        if (aheadMeters <= 250 && criticalAlertedStep !== upcoming.stepIndex) {
+          setStatus(`⚠ Entering ${upcoming.reason} zone in ${aheadMeters}m`, 'error');
+          criticalAlertedStep = upcoming.stepIndex;
+        }
+      }
     }
 
-    setSafetyStatus('Safety monitoring active: on-route and tracking live location.', 'success');
+    setSafetyStatus(`Safety monitoring active. Safe arrival expected in ${remainingMinutes} min.`, 'success');
   }
 
   function onPosition(positionEvent) {
@@ -582,9 +636,22 @@ const SafetyAssist = (() => {
   }
 
   function setSelectedRoute(route) {
+    const routeChanged = !selectedRoute || !route || selectedRoute.id !== route.id;
     selectedRoute = route || null;
-    deviationAlerted = false;
-    criticalAlerted = false;
+
+    if (routeChanged) {
+      deviationAlerted = false;
+      criticalAlertedStep = -1;
+    }
+
+    const recommendedRoute = currentRoutes.length > 0 ? currentRoutes[0] : null;
+    if (!enabled && !autoActivatedOnce && selectedRoute && recommendedRoute && selectedRoute.id === recommendedRoute.id) {
+      enabled = true;
+      autoActivatedOnce = true;
+      syncSafetyButton();
+      setSafetyStatus('Safety Mode auto-activated for recommended route. Location shared with trusted contact (simulated).', 'success');
+    }
+
     if (enabled) startMonitoring();
   }
 
@@ -675,18 +742,30 @@ function analyseAndRender(directionsResult) {
     const leg = route.legs[0];
     const analysis = RiskEngine.scoreRoute(leg, h + m / 60);
     const futureForecast = RiskEngine.forecast(leg, h, m);
+    const pathDistanceIndex = buildPathDistanceIndex(route.overview_path || []);
 
     // Critical segments (risk > 0.55)
+    let cumulativeStepMeters = 0;
     const criticalSegments = analysis.segments
-      .filter(s => s.risk > 0.55)
-      .slice(0, 3)
-      .map(s => {
+      .map((s, stepIndex) => {
+        const atMeters = cumulativeStepMeters + (s.distM / 2);
+        cumulativeStepMeters += s.distM;
+        if (s.risk <= 0.55) return null;
+
         const reasons = [];
         if (s.lighting < 0.5) reasons.push('low lighting');
         if (s.isolation > 0.5) reasons.push('isolated');
         if (s.crowd < 0.35) reasons.push('low foot traffic');
-        return { name: s.name, reason: reasons.join(' + ') || 'elevated risk', risk: s.risk };
-      });
+        return {
+          name: s.name,
+          reason: reasons.join(' + ') || 'elevated risk',
+          risk: s.risk,
+          atMeters,
+          stepIndex,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 3);
 
     // Future risk transition
     const currentLevel = analysis.level;
@@ -705,6 +784,8 @@ function analyseAndRender(directionsResult) {
       name: route.summary || `Route ${String.fromCharCode(65 + idx)}`,
       distanceKm: (leg.distance.value / 1000).toFixed(1),
       estimatedMinutes: Math.round(leg.duration.value / 60),
+      totalRouteMeters: leg.distance.value,
+      pathDistanceIndex,
       riskScore: analysis.score,
       riskLevel: analysis.level,
       confidence: analysis.confidence,
@@ -882,7 +963,6 @@ const UI = (() => {
     card.addEventListener('click', () => {
       selectedCardIdx = rank;
       renderCards(currentRoutes);
-      SafetyAssist.setSelectedRoute(currentRoutes[selectedCardIdx] || null);
       // Highlight on map
       renderRoutesOnMap(currentRoutes);
     });
